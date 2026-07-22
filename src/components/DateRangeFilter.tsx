@@ -8,6 +8,7 @@ interface DateRangeFilterProps {
   onEndDateChange: (date: string) => void;
   minAvailableDate?: string;
   maxAvailableDate?: string;
+  availableYears?: string[];
   totalDaysCount: number;
   filteredDaysCount: number;
   onReset: () => void;
@@ -20,6 +21,7 @@ export const DateRangeFilter: React.FC<DateRangeFilterProps> = ({
   onEndDateChange,
   minAvailableDate = '',
   maxAvailableDate = '',
+  availableYears = [],
   totalDaysCount,
   filteredDaysCount,
   onReset
@@ -29,8 +31,36 @@ export const DateRangeFilter: React.FC<DateRangeFilterProps> = ({
     (endDate && endDate !== maxAvailableDate)
   );
 
+  // Compute years list dynamically
+  const yearsToDisplay = React.useMemo(() => {
+    if (availableYears && availableYears.length > 0) {
+      return availableYears;
+    }
+    if (!minAvailableDate || !maxAvailableDate) return ['2026', '2025', '2024'];
+    const minY = parseInt(minAvailableDate.slice(0, 4), 10);
+    const maxY = parseInt(maxAvailableDate.slice(0, 4), 10);
+    const years: string[] = [];
+    if (!isNaN(minY) && !isNaN(maxY)) {
+      for (let y = maxY; y >= minY; y--) {
+        years.push(String(y));
+      }
+    }
+    return years.length > 0 ? years : ['2026', '2025', '2024'];
+  }, [availableYears, minAvailableDate, maxAvailableDate]);
+
+  // Check if current filter corresponds to a full specific year
+  const activeSelectedYear = React.useMemo(() => {
+    if (!startDate || !endDate) return '';
+    if (startDate.endsWith('-01-01') && endDate.endsWith('-12-31')) {
+      const startY = startDate.slice(0, 4);
+      const endY = endDate.slice(0, 4);
+      if (startY === endY) return startY;
+    }
+    return '';
+  }, [startDate, endDate]);
+
   // Quick preset helper
-  const applyPreset = (preset: 'all' | '30d' | '90d' | '6m' | 'ytd' | '2025' | '2024') => {
+  const applyPreset = (preset: 'all' | '30d' | '90d' | '6m' | 'ytd') => {
     if (preset === 'all') {
       onReset();
       return;
@@ -58,13 +88,14 @@ export const DateRangeFilter: React.FC<DateRangeFilterProps> = ({
       const year = maxD.getFullYear();
       onStartDateChange(`${year}-01-01`);
       onEndDateChange(maxAvailableDate);
-    } else if (preset === '2025') {
-      onStartDateChange('2025-01-01');
-      onEndDateChange('2025-12-31');
-    } else if (preset === '2024') {
-      onStartDateChange('2024-01-01');
-      onEndDateChange('2024-12-31');
     }
+  };
+
+  const handleYearSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const yr = e.target.value;
+    if (!yr) return;
+    onStartDateChange(`${yr}-01-01`);
+    onEndDateChange(`${yr}-12-31`);
   };
 
   return (
@@ -188,19 +219,32 @@ export const DateRangeFilter: React.FC<DateRangeFilterProps> = ({
             YTD
           </button>
 
-          <button
-            onClick={() => applyPreset('2025')}
-            className="px-2.5 py-1 rounded-lg font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 transition cursor-pointer"
-          >
-            Year 2025
-          </button>
-
-          <button
-            onClick={() => applyPreset('2024')}
-            className="px-2.5 py-1 rounded-lg font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 transition cursor-pointer"
-          >
-            Year 2024
-          </button>
+          {/* Year Dropdown containing all sheet data years */}
+          <div className="relative inline-block">
+            <select
+              value={activeSelectedYear}
+              onChange={handleYearSelect}
+              className={`px-2.5 py-1 rounded-lg font-semibold text-xs transition cursor-pointer border focus:outline-none appearance-none pr-7 ${
+                activeSelectedYear
+                  ? 'bg-indigo-600 text-white border-indigo-600 font-bold shadow-xs'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200'
+              }`}
+            >
+              <option value="" className="text-slate-900 bg-white">
+                Year ▾
+              </option>
+              {yearsToDisplay.map((yr) => (
+                <option key={yr} value={yr} className="text-slate-900 bg-white font-medium">
+                  Year {yr}
+                </option>
+              ))}
+            </select>
+            <div className={`pointer-events-none absolute inset-y-0 right-0 flex items-center px-1.5 ${activeSelectedYear ? 'text-white' : 'text-slate-500'}`}>
+              <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 20 20">
+                <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+              </svg>
+            </div>
+          </div>
         </div>
       </div>
     </div>

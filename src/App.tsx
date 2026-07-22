@@ -58,6 +58,18 @@ export default function App() {
     return sorted[sorted.length - 1].parsedDate;
   }, [niftyData]);
 
+  // Extract all distinct years from current dataset
+  const availableYears = useMemo(() => {
+    if (niftyData.length === 0) return [];
+    const yearSet = new Set<string>();
+    niftyData.forEach(d => {
+      if (d.parsedDate && d.parsedDate.length >= 4) {
+        yearSet.add(d.parsedDate.slice(0, 4));
+      }
+    });
+    return Array.from(yearSet).sort().reverse();
+  }, [niftyData]);
+
   // Filtered dataset based on From Date and To Date
   const filteredNiftyData = useMemo(() => {
     if (!startDate && !endDate) return niftyData;
@@ -196,6 +208,7 @@ export default function App() {
           onEndDateChange={setEndDate}
           minAvailableDate={minAvailableDate}
           maxAvailableDate={maxAvailableDate}
+          availableYears={availableYears}
           totalDaysCount={niftyData.length}
           filteredDaysCount={filteredNiftyData.length}
           onReset={handleResetDateRange}
