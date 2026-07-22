@@ -1,0 +1,6 @@
+{
+  "name": "NIFTY 50 Data Visualizer",
+  "description": "Interactive trading data dashboard for NIFTY 50 featuring price charts, gap analysis, intraday volatility metrics, and Google Sheets data import.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
