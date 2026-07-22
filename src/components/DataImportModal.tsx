@@ -87,13 +87,16 @@ export const DataImportModal: React.FC<DataImportModalProps> = ({
   };
 
   const gasCodeSnippet = `/**
- * Google Apps Script for NIFTY 50 Google Sheet Visualizer
+ * Google Apps Script for NIFTY 50 Google Sheet Visualizer & Auto-Sync
  * File: Code.js
  * 
- * Auto-calculates Gap % & Gap Type for any missing values in your Google Sheet!
+ * Includes updateNiftyData() which automatically fetches latest daily candle
+ * for NIFTY 50 (%5ENSEI) from Yahoo Finance and appends it to your Google Sheet!
  */
 function doGet(e) {
   try {
+    try { updateNiftyData(); } catch (err) {}
+
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sheet = ss.getSheetByName("Data") || ss.getSheets()[0];
     var data = sheet.getDataRange().getValues();
@@ -153,7 +156,9 @@ function doGet(e) {
     for (var k = 0; k < rawRows.length; k++) {
       var r = rawRows[k];
       if (r.dayRange === 0 && r.high >= r.low) r.dayRange = Math.round((r.high - r.low) * 100) / 100;
-      if (r.openCloseReturn === 0 && r.open > 0) r.openCloseReturn = Math.round(((r.close - r.open) / r.open) * 10000) / 100;
+      if (r.open > 0 && (r.openCloseReturn === 0 || Math.abs(r.openCloseReturn) > 30)) {
+        r.openCloseReturn = Math.round((((r.close - r.open) * 100) / r.open) * 100) / 100;
+      }
 
       // Auto-calculate Gap % from previous close
       if (r.gapPercent === null && k > 0) {
@@ -166,8 +171,8 @@ function doGet(e) {
       // Auto-calculate Gap Type
       if (r.gapType === "N/A" || !r.gapType) {
         if (r.gapPercent !== null && !isNaN(r.gapPercent)) {
-          if (r.gapPercent > 0.05) r.gapType = "GapUp";
-          else if (r.gapPercent < -0.05) r.gapType = "GapDown";
+          if (r.gapPercent > 0.05) r.gapType = "Gap Up";
+          else if (r.gapPercent < -0.05) r.gapType = "Gap Down";
           else r.gapType = "Flat";
         } else {
           r.gapType = "Flat";
@@ -182,40 +187,68 @@ function doGet(e) {
 }
 
 /**
- * OPTIONAL: Run autoFillSheetGaps in Apps Script to automatically fill
- * empty Gap % and Gap Type columns directly inside your Google Sheet!
+ * AUTO-SYNC FUNCTION:
+ * Fetches latest daily market candle for NIFTY 50 (%5ENSEI) from Yahoo Finance
+ * and inserts it into row 2 of the Google Sheet if today's date does not exist.
  */
-function autoFillSheetGaps() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName("Data") || ss.getSheets()[0];
-  var data = sheet.getDataRange().getValues();
-  if (data.length <= 1) return;
+function updateNiftyData() {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName("Data") || ss.getSheets()[0];
 
-  var isExtended = String(data[0][0]).toUpperCase().indexOf("NIFTY") !== -1;
-  var gapColIdx = isExtended ? 6 : 5;
-  var typeColIdx = isExtended ? 7 : 6;
-  var closeColIdx = isExtended ? 5 : 4;
-  var openColIdx = isExtended ? 2 : 1;
+    var url = "https://query1.finance.yahoo.com/v8/finance/chart/%5ENSEI?interval=1d&range=5d";
 
-  for (var i = 2; i < data.length; i++) {
-    var prevClose = Number(data[i - 1][closeColIdx]) || 0;
-    var currentOpen = Number(data[i][openColIdx]) || 0;
-    
-    if (prevClose > 0 && currentOpen > 0) {
-      var calcGap = Math.round((((currentOpen - prevClose) / prevClose) * 100) * 100) / 100;
-      var existingGap = data[i][gapColIdx];
-      if (existingGap === "" || existingGap === null || isNaN(existingGap)) {
-        sheet.getRange(i + 1, gapColIdx + 1).setValue(calcGap);
-      }
-      
-      var existingType = String(data[i][typeColIdx] || "").trim();
-      if (!existingType || existingType === "N/A") {
-        var gType = "Flat";
-        if (calcGap > 0.05) gType = "GapUp";
-        else if (calcGap < -0.05) gType = "GapDown";
-        sheet.getRange(i + 1, typeColIdx + 1).setValue(gType);
-      }
+    var res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+    if (res.getResponseCode() !== 200) return;
+
+    var json = JSON.parse(res.getContentText());
+    if (!json.chart || !json.chart.result || !json.chart.result[0]) return;
+
+    var result = json.chart.result[0];
+    var quote = result.indicators.quote[0];
+    if (!quote || !quote.close) return;
+
+    var last = quote.close.length - 1;
+    while (last >= 0 && (quote.open[last] == null || quote.high[last] == null || quote.low[last] == null || quote.close[last] == null)) {
+      last--;
     }
+    if (last < 0) return;
+
+    var date = new Date(result.timestamp[last] * 1000);
+    var open = Number(quote.open[last]);
+    var high = Number(quote.high[last]);
+    var low = Number(quote.low[last]);
+    var close = Number(quote.close[last]);
+
+    var prev = last - 1;
+    while (prev >= 0 && quote.close[prev] == null) prev--;
+    var previousClose = prev >= 0 ? Number(quote.close[prev]) : close;
+
+    var gapPercent = Number((((open - previousClose) / previousClose) * 100).toFixed(2));
+    var gapType = gapPercent > 0.05 ? "Gap Up" : gapPercent < -0.05 ? "Gap Down" : "Flat";
+    // Open-Close percentage formula: (close - open) * 100 / open
+    var openCloseReturn = Number((((close - open) * 100) / open).toFixed(2));
+    var dayRange = Number((high - low).toFixed(2));
+
+    var today = Utilities.formatDate(date, Session.getScriptTimeZone() || "GMT", "dd-MMM-yy");
+
+    var data = sheet.getDataRange().getValues();
+    for (var i = 1; i < data.length; i++) {
+      var rowDate = parseSheetDate(data[i][1] || data[i][0]);
+      if (rowDate === today) return; // duplicate found
+    }
+
+    sheet.insertRowAfter(1);
+    sheet.getRange(2, 1, 1, 10).setValues([[
+      "NIFTY 50", date, Number(open.toFixed(2)), Number(high.toFixed(2)),
+      Number(low.toFixed(2)), Number(close.toFixed(2)), gapPercent, gapType,
+      openCloseReturn, dayRange
+    ]]);
+
+    sheet.getRange(2, 2).setNumberFormat("dd-MMM-yy");
+    sheet.getRange(2, 3, 1, 8).setNumberFormat("0.00");
+  } catch (err) {
+    Logger.log("Error in updateNiftyData: " + err.toString());
   }
 }
 

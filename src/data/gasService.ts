@@ -54,10 +54,14 @@ export async function fetchGoogleAppsScriptData(scriptUrl: string): Promise<Nift
       ? Number(gapPercentRaw) 
       : null;
 
-    let gapTypeRaw = row.gapType || row['Gap Type'] || '';
+    let gapTypeRaw = String(row.gapType || row['Gap Type'] || '').trim();
     let gapType: 'GapUp' | 'GapDown' | 'Flat' | 'N/A' = 'N/A';
-    if (gapTypeRaw === 'GapUp' || gapTypeRaw === 'GapDown' || gapTypeRaw === 'Flat') {
-      gapType = gapTypeRaw;
+    if (gapTypeRaw === 'GapUp' || gapTypeRaw === 'Gap Up') {
+      gapType = 'GapUp';
+    } else if (gapTypeRaw === 'GapDown' || gapTypeRaw === 'Gap Down') {
+      gapType = 'GapDown';
+    } else if (gapTypeRaw === 'Flat') {
+      gapType = 'Flat';
     } else if (gapPercent !== null) {
       if (gapPercent > 0.05) gapType = 'GapUp';
       else if (gapPercent < -0.05) gapType = 'GapDown';
