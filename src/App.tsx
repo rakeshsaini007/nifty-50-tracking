@@ -9,6 +9,7 @@ import { GapAnalysisChart } from './components/GapAnalysisChart';
 import { DayRangeVolatilityChart } from './components/DayRangeVolatilityChart';
 import { DataTable } from './components/DataTable';
 import { DataImportModal } from './components/DataImportModal';
+import { DateRangeFilter } from './components/DateRangeFilter';
 import { TrendingUp } from 'lucide-react';
 
 const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbzV3RHp5lMkFVQJvn27o_qLCTDhIOR6WVvCD5kdpb_3VINGCO3dZKLv1KI6DRSSLpIo/exec';
@@ -39,6 +40,39 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState<ViewTab>('overview');
   const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
+
+  // Date Range Filter State
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
+
+  // Calculate available date bounds in current dataset
+  const minAvailableDate = useMemo(() => {
+    if (niftyData.length === 0) return '';
+    const sorted = [...niftyData].sort((a, b) => a.parsedDate.localeCompare(b.parsedDate));
+    return sorted[0].parsedDate;
+  }, [niftyData]);
+
+  const maxAvailableDate = useMemo(() => {
+    if (niftyData.length === 0) return '';
+    const sorted = [...niftyData].sort((a, b) => a.parsedDate.localeCompare(b.parsedDate));
+    return sorted[sorted.length - 1].parsedDate;
+  }, [niftyData]);
+
+  // Filtered dataset based on From Date and To Date
+  const filteredNiftyData = useMemo(() => {
+    if (!startDate && !endDate) return niftyData;
+    return niftyData.filter(d => {
+      const itemDate = d.parsedDate;
+      if (startDate && itemDate < startDate) return false;
+      if (endDate && itemDate > endDate) return false;
+      return true;
+    });
+  }, [niftyData, startDate, endDate]);
+
+  const handleResetDateRange = () => {
+    setStartDate('');
+    setEndDate('');
+  };
 
   // Sync data to localStorage
   useEffect(() => {
@@ -76,8 +110,8 @@ export default function App() {
     }
   }, []);
 
-  // Compute stats on the fly
-  const stats = useMemo(() => computeStats(niftyData), [niftyData]);
+  // Compute stats on the filtered dataset
+  const stats = useMemo(() => computeStats(filteredNiftyData), [filteredNiftyData]);
 
   const handleImportData = (parsedRows: NiftyDataPoint[], append: boolean) => {
     if (append) {
@@ -90,11 +124,13 @@ export default function App() {
   const handleResetData = () => {
     if (window.confirm('Reset data back to initial NIFTY 50 dataset?')) {
       setNiftyData(INITIAL_NIFTY_DATA);
+      handleResetDateRange();
     }
   };
 
   const handleExportCSV = () => {
-    if (niftyData.length === 0) return;
+    const exportDataset = filteredNiftyData.length > 0 ? filteredNiftyData : niftyData;
+    if (exportDataset.length === 0) return;
 
     const headers = [
       'Index Name',
@@ -109,7 +145,7 @@ export default function App() {
       'Day Range'
     ];
 
-    const rows = niftyData.map(d => [
+    const rows = exportDataset.map(d => [
       d.indexName,
       d.date,
       d.open,
@@ -152,21 +188,34 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {/* Global Date Range Filter ("From Date" to "To Date") */}
+        <DateRangeFilter
+          startDate={startDate}
+          endDate={endDate}
+          onStartDateChange={setStartDate}
+          onEndDateChange={setEndDate}
+          minAvailableDate={minAvailableDate}
+          maxAvailableDate={maxAvailableDate}
+          totalDaysCount={niftyData.length}
+          filteredDaysCount={filteredNiftyData.length}
+          onReset={handleResetDateRange}
+        />
+
         {/* Always visible top summary cards */}
-        <StatsOverview stats={stats} dataCount={niftyData.length} />
+        <StatsOverview stats={stats} dataCount={filteredNiftyData.length} />
 
         {/* Tab Views */}
         {activeTab === 'overview' && (
           <div className="space-y-6">
-            <PriceCandlestickChart data={niftyData} />
+            <PriceCandlestickChart data={filteredNiftyData} />
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <GapAnalysisChart data={niftyData} stats={stats} />
-              <DayRangeVolatilityChart data={niftyData} stats={stats} />
+              <GapAnalysisChart data={filteredNiftyData} stats={stats} />
+              <DayRangeVolatilityChart data={filteredNiftyData} stats={stats} />
             </div>
 
             <DataTable
-              data={niftyData}
+              data={filteredNiftyData}
               onUpdateData={setNiftyData}
               onOpenImport={() => setIsImportModalOpen(true)}
               onExportCSV={handleExportCSV}
@@ -176,9 +225,9 @@ export default function App() {
 
         {activeTab === 'price' && (
           <div className="space-y-6">
-            <PriceCandlestickChart data={niftyData} />
+            <PriceCandlestickChart data={filteredNiftyData} />
             <DataTable
-              data={niftyData}
+              data={filteredNiftyData}
               onUpdateData={setNiftyData}
               onOpenImport={() => setIsImportModalOpen(true)}
               onExportCSV={handleExportCSV}
@@ -188,20 +237,20 @@ export default function App() {
 
         {activeTab === 'gap' && (
           <div className="space-y-6">
-            <GapAnalysisChart data={niftyData} stats={stats} />
+            <GapAnalysisChart data={filteredNiftyData} stats={stats} />
           </div>
         )}
 
         {activeTab === 'volatility' && (
           <div className="space-y-6">
-            <DayRangeVolatilityChart data={niftyData} stats={stats} />
+            <DayRangeVolatilityChart data={filteredNiftyData} stats={stats} />
           </div>
         )}
 
         {activeTab === 'table' && (
           <div className="space-y-6">
             <DataTable
-              data={niftyData}
+              data={filteredNiftyData}
               onUpdateData={setNiftyData}
               onOpenImport={() => setIsImportModalOpen(true)}
               onExportCSV={handleExportCSV}
@@ -218,7 +267,7 @@ export default function App() {
             <span className="font-semibold text-slate-200">NIFTY 50 Interactive Dashboard</span>
           </div>
           <div>
-            Analyzed {niftyData.length} trading days · Supports Google Sheet Web App & TSV/CSV copy-paste
+            Showing {filteredNiftyData.length} of {niftyData.length} trading days · Supports Google Sheet Web App & TSV/CSV copy-paste
           </div>
           <button
             onClick={() => setIsImportModalOpen(true)}
@@ -240,3 +289,4 @@ export default function App() {
     </div>
   );
 }
+
