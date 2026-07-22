@@ -18,6 +18,7 @@ interface FilteredDaysTableProps {
   threshold: number;
   direction: string;
   filterMode: string;
+  filterMetric?: string;
 }
 
 type SortField = 'date' | 'gapPercent' | 'openCloseReturn' | 'dayRange' | 'open' | 'close';
@@ -26,11 +27,13 @@ export const FilteredDaysTable: React.FC<FilteredDaysTableProps> = ({
   data,
   threshold,
   direction,
-  filterMode
+  filterMode,
+  filterMetric = 'openClose'
 }) => {
+  const isOpenClose = filterMetric === 'openClose';
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortField, setSortField] = useState<SortField>('date');
-  const [sortAsc, setSortAsc] = useState<boolean>(false); // default latest date first
+  const [sortField, setSortField] = useState<SortField>(isOpenClose ? 'openCloseReturn' : 'date');
+  const [sortAsc, setSortAsc] = useState<boolean>(false); // default latest/highest first
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -49,7 +52,8 @@ export const FilteredDaysTable: React.FC<FilteredDaysTableProps> = ({
         return (
           item.date.toLowerCase().includes(term) ||
           item.gapType.toLowerCase().includes(term) ||
-          (item.gapPercent !== null && item.gapPercent.toString().includes(term))
+          (item.gapPercent !== null && item.gapPercent.toString().includes(term)) ||
+          item.openCloseReturn.toString().includes(term)
         );
       })
       .sort((a, b) => {
@@ -108,7 +112,7 @@ export const FilteredDaysTable: React.FC<FilteredDaysTableProps> = ({
     link.setAttribute('href', encodedUri);
     link.setAttribute(
       'download',
-      `Filtered_Gap_Days_${threshold}%_${direction}_${new Date().toISOString().slice(0, 10)}.csv`
+      `Filtered_${isOpenClose ? 'OpenClose' : 'Gap'}_Days_${threshold}%_${direction}_${new Date().toISOString().slice(0, 10)}.csv`
     );
     document.body.appendChild(link);
     link.click();
@@ -119,7 +123,9 @@ export const FilteredDaysTable: React.FC<FilteredDaysTableProps> = ({
   let filterTitle = 'All Available Trading Days';
   if (threshold > 0 || direction !== 'all') {
     let modeText = filterMode === 'min' ? '≥' : 'in Range';
-    let dirText = direction === 'up' ? 'Gap Up' : direction === 'down' ? 'Gap Down' : 'Gap Move';
+    let dirText = isOpenClose
+      ? (direction === 'up' ? 'Bullish Open-Close Return' : direction === 'down' ? 'Bearish Open-Close Return' : 'Open-Close Return')
+      : (direction === 'up' ? 'Gap Up' : direction === 'down' ? 'Gap Down' : 'Gap Move');
     filterTitle = `Days with ${dirText} ${modeText} ${threshold.toFixed(2)}%`;
   }
 
@@ -213,10 +219,12 @@ export const FilteredDaysTable: React.FC<FilteredDaysTableProps> = ({
 
               <th
                 onClick={() => handleSort('openCloseReturn')}
-                className="py-3 px-3 cursor-pointer hover:bg-slate-100 transition select-none text-right"
+                className={`py-3 px-3 cursor-pointer hover:bg-slate-100 transition select-none text-right ${
+                  isOpenClose ? 'bg-amber-100/70 text-amber-900 font-bold' : ''
+                }`}
               >
                 <div className="flex items-center justify-end gap-1">
-                  <span>Intraday Return</span>
+                  <span>Open-Close %</span>
                   <ArrowUpDown className="w-3 h-3 text-slate-400" />
                 </div>
               </th>

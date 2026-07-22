@@ -1,11 +1,12 @@
 import React from 'react';
-import { Filter, Zap, TrendingUp, TrendingDown, Layers, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { Zap, TrendingUp, TrendingDown, ArrowUpDown, Filter } from 'lucide-react';
 
 export const GAP_THRESHOLDS = [0, 0.25, 0.50, 0.75, 1.00, 1.25, 1.50, 1.75, 2.00] as const;
 export type GapThresholdValue = typeof GAP_THRESHOLDS[number];
 
 export type DirectionFilter = 'all' | 'up' | 'down';
 export type FilterMode = 'min' | 'range';
+export type FilterMetric = 'openClose' | 'gap';
 
 interface GapMoveFilterProps {
   selectedThreshold: number;
@@ -14,6 +15,8 @@ interface GapMoveFilterProps {
   onSelectDirection: (dir: DirectionFilter) => void;
   filterMode: FilterMode;
   onSelectFilterMode: (mode: FilterMode) => void;
+  filterMetric?: FilterMetric;
+  onSelectFilterMetric?: (metric: FilterMetric) => void;
   matchingCount?: number;
   totalCount?: number;
   compact?: boolean;
@@ -26,30 +29,69 @@ export const GapMoveFilter: React.FC<GapMoveFilterProps> = ({
   onSelectDirection,
   filterMode,
   onSelectFilterMode,
+  filterMetric = 'openClose',
+  onSelectFilterMetric,
   matchingCount,
   totalCount,
   compact = false
 }) => {
+  const isOpenClose = filterMetric === 'openClose';
+
   return (
     <div className={`bg-slate-900 text-slate-100 rounded-2xl border border-slate-800 p-4 shadow-md space-y-3 ${compact ? 'text-xs' : ''}`}>
       {/* Title & Mode Switcher */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 bg-amber-500/20 text-amber-400 rounded-lg border border-amber-500/30">
-            <Zap className="w-4 h-4" />
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+        <div className="flex items-center gap-2.5">
+          <div className="p-2 bg-amber-500/20 text-amber-400 rounded-xl border border-amber-500/30 shrink-0">
+            {isOpenClose ? <ArrowUpDown className="w-4 h-4 text-amber-400" /> : <Zap className="w-4 h-4 text-amber-400" />}
           </div>
           <div>
             <h3 className="font-bold text-sm text-white flex items-center gap-2">
-              NIFTY Gap Move % Filter
+              <span>{isOpenClose ? 'NIFTY Open-Close % Filter' : 'NIFTY Gap Move % Filter'}</span>
+              <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full border border-amber-500/30 uppercase font-semibold">
+                {isOpenClose ? '(Close - Open) * 100 / Open' : 'Opening Gap %'}
+              </span>
             </h3>
             <p className="text-[11px] text-slate-400">
-              Isolate market behavior for specific opening gap sizes
+              {isOpenClose
+                ? 'Filter market sessions by intraday return percentage formula: (Close - Open) * 100 / Open'
+                : 'Isolate market behavior for specific opening gap sizes'}
             </p>
           </div>
         </div>
 
-        {/* Filter Mode & Direction Toggles */}
+        {/* Filter Metric & Direction Toggles */}
         <div className="flex items-center flex-wrap gap-2">
+          {/* Filter Column Toggle (Open-Close % vs Gap Move %) */}
+          {onSelectFilterMetric && (
+            <div className="bg-slate-800 p-1 rounded-xl flex items-center border border-slate-700/80 text-xs">
+              <button
+                onClick={() => onSelectFilterMetric('openClose')}
+                className={`px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer flex items-center gap-1 ${
+                  isOpenClose
+                    ? 'bg-amber-500 text-slate-950 shadow-sm font-bold'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+                title="Filter by Open-Close % Column: (close - open) * 100 / open"
+              >
+                <ArrowUpDown className="w-3 h-3" />
+                <span>Open-Close %</span>
+              </button>
+              <button
+                onClick={() => onSelectFilterMetric('gap')}
+                className={`px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer flex items-center gap-1 ${
+                  !isOpenClose
+                    ? 'bg-indigo-600 text-white shadow-sm font-bold'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+                title="Filter by Opening Gap Move % Column"
+              >
+                <Zap className="w-3 h-3" />
+                <span>Gap %</span>
+              </button>
+            </div>
+          )}
+
           {/* Direction Toggle */}
           <div className="bg-slate-800 p-1 rounded-xl flex items-center border border-slate-700/80 text-xs">
             <button
@@ -60,7 +102,7 @@ export const GapMoveFilter: React.FC<GapMoveFilterProps> = ({
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              Both (Up & Down)
+              Both ({isOpenClose ? 'Bull & Bear' : 'Up & Down'})
             </button>
             <button
               onClick={() => onSelectDirection('up')}
@@ -71,7 +113,7 @@ export const GapMoveFilter: React.FC<GapMoveFilterProps> = ({
               }`}
             >
               <TrendingUp className="w-3 h-3" />
-              <span>Gap Up</span>
+              <span>{isOpenClose ? 'Bullish (+)' : 'Gap Up'}</span>
             </button>
             <button
               onClick={() => onSelectDirection('down')}
@@ -82,7 +124,7 @@ export const GapMoveFilter: React.FC<GapMoveFilterProps> = ({
               }`}
             >
               <TrendingDown className="w-3 h-3" />
-              <span>Gap Down</span>
+              <span>{isOpenClose ? 'Bearish (-)' : 'Gap Down'}</span>
             </button>
           </div>
 
@@ -90,7 +132,7 @@ export const GapMoveFilter: React.FC<GapMoveFilterProps> = ({
           <div className="bg-slate-800 p-1 rounded-xl flex items-center border border-slate-700/80 text-xs">
             <button
               onClick={() => onSelectFilterMode('min')}
-              title="Filter records with Gap >= Threshold"
+              title={isOpenClose ? "Filter records with |Open-Close %| >= Threshold" : "Filter records with Gap >= Threshold"}
               className={`px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer ${
                 filterMode === 'min'
                   ? 'bg-slate-700 text-amber-300 shadow-sm border border-slate-600'
@@ -114,10 +156,12 @@ export const GapMoveFilter: React.FC<GapMoveFilterProps> = ({
         </div>
       </div>
 
-      {/* Threshold Pills Buttons */}
+      {/* Threshold Span Pills Buttons */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between text-[11px] text-slate-400">
-          <span className="font-semibold text-slate-300">Select Gap Move Size (%):</span>
+          <span className="font-semibold text-slate-300">
+            Select {isOpenClose ? 'Open-Close % Return' : 'Gap Move'} Size (%):
+          </span>
           {matchingCount !== undefined && totalCount !== undefined && (
             <span className="text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
               Showing {matchingCount} of {totalCount} Days ({totalCount > 0 ? ((matchingCount / totalCount) * 100).toFixed(0) : 0}%)
@@ -134,7 +178,7 @@ export const GapMoveFilter: React.FC<GapMoveFilterProps> = ({
                 : 'bg-slate-800/80 text-slate-300 hover:bg-slate-800 border-slate-700'
             }`}
           >
-            All Gaps
+            {isOpenClose ? 'All Open-Close Moves' : 'All Gaps'}
           </button>
 
           {GAP_THRESHOLDS.filter(t => t > 0).map((t) => {

@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { NiftyDataPoint, SummaryStats } from '../types';
-import { GapMoveFilter, DirectionFilter, FilterMode } from './GapMoveFilter';
+import { GapMoveFilter, DirectionFilter, FilterMode, FilterMetric } from './GapMoveFilter';
 import { FilteredDaysTable } from './FilteredDaysTable';
-import { filterDataByGapMove, computeGapMoveStats } from '../data/gapUtils';
+import { filterDataByMetric, computeGapMoveStats } from '../data/gapUtils';
 import {
   ResponsiveContainer,
   BarChart,
@@ -30,18 +30,19 @@ export const GapAnalysisChart: React.FC<GapAnalysisProps> = ({ data, stats }) =>
   const [selectedThreshold, setSelectedThreshold] = useState<number>(0);
   const [direction, setDirection] = useState<DirectionFilter>('all');
   const [filterMode, setFilterMode] = useState<FilterMode>('min');
+  const [filterMetric, setFilterMetric] = useState<FilterMetric>('openClose');
 
-  // Filter out days without gap data first
+  // Filter out days without valid data first
   const validGapData = useMemo(() => {
     return data
-      .filter(d => d.gapPercent !== null && !isNaN(d.gapPercent))
+      .filter(d => d.openCloseReturn !== undefined && !isNaN(d.openCloseReturn))
       .sort((a, b) => a.parsedDate.localeCompare(b.parsedDate));
   }, [data]);
 
-  // Apply gap move filter
+  // Apply metric filter (Open-Close % or Gap %)
   const gapData = useMemo(() => {
-    return filterDataByGapMove(validGapData, selectedThreshold, direction, filterMode);
-  }, [validGapData, selectedThreshold, direction, filterMode]);
+    return filterDataByMetric(validGapData, selectedThreshold, direction, filterMode, filterMetric);
+  }, [validGapData, selectedThreshold, direction, filterMode, filterMetric]);
 
   // Compute stats on the filtered subset
   const filteredGapStats = useMemo(() => {
@@ -131,7 +132,7 @@ export const GapAnalysisChart: React.FC<GapAnalysisProps> = ({ data, stats }) =>
 
   return (
     <div className="space-y-6 mb-6">
-      {/* Interactive Gap Move % Filter */}
+      {/* Interactive Gap / Open-Close Filter */}
       <GapMoveFilter
         selectedThreshold={selectedThreshold}
         onSelectThreshold={setSelectedThreshold}
@@ -139,6 +140,8 @@ export const GapAnalysisChart: React.FC<GapAnalysisProps> = ({ data, stats }) =>
         onSelectDirection={setDirection}
         filterMode={filterMode}
         onSelectFilterMode={setFilterMode}
+        filterMetric={filterMetric}
+        onSelectFilterMetric={setFilterMetric}
         matchingCount={gapData.length}
         totalCount={validGapData.length}
       />
@@ -352,12 +355,13 @@ export const GapAnalysisChart: React.FC<GapAnalysisProps> = ({ data, stats }) =>
         </div>
       </div>
 
-      {/* List of Days Having Filtered Gap % */}
+      {/* List of Days Having Filtered Gap % or Open-Close % */}
       <FilteredDaysTable
         data={gapData}
         threshold={selectedThreshold}
         direction={direction}
         filterMode={filterMode}
+        filterMetric={filterMetric}
       />
     </div>
   );

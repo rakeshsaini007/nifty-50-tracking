@@ -1,11 +1,12 @@
 import { NiftyDataPoint } from '../types';
-import { DirectionFilter, FilterMode, GAP_THRESHOLDS } from '../components/GapMoveFilter';
+import { DirectionFilter, FilterMode, FilterMetric, GAP_THRESHOLDS } from '../components/GapMoveFilter';
 
-export function filterDataByGapMove(
+export function filterDataByMetric(
   data: NiftyDataPoint[],
   threshold: number,
   direction: DirectionFilter = 'all',
-  mode: FilterMode = 'min'
+  mode: FilterMode = 'min',
+  metric: FilterMetric = 'openClose'
 ): NiftyDataPoint[] {
   if (threshold === 0 && direction === 'all') {
     return data;
@@ -14,28 +15,48 @@ export function filterDataByGapMove(
   const thresholdsList: number[] = [...GAP_THRESHOLDS, Infinity];
 
   return data.filter(item => {
-    if (item.gapPercent === null || isNaN(item.gapPercent)) {
+    let val: number | null = null;
+    if (metric === 'openClose') {
+      val = item.openCloseReturn !== undefined && item.openCloseReturn !== null && !isNaN(item.openCloseReturn)
+        ? item.openCloseReturn
+        : null;
+    } else {
+      val = item.gapPercent !== undefined && item.gapPercent !== null && !isNaN(item.gapPercent)
+        ? item.gapPercent
+        : null;
+    }
+
+    if (val === null) {
       return false;
     }
 
-    const gapVal = item.gapPercent;
-    const absGap = Math.abs(gapVal);
+    const absVal = Math.abs(val);
 
     // Direction check
-    if (direction === 'up' && gapVal < 0) return false;
-    if (direction === 'down' && gapVal > 0) return false;
+    if (direction === 'up' && val < 0) return false;
+    if (direction === 'down' && val > 0) return false;
 
     if (threshold === 0) return true;
 
     if (mode === 'min') {
-      return absGap >= threshold;
+      return absVal >= threshold;
     } else {
       // Find range upper bound
       const idx = thresholdsList.indexOf(threshold);
       const nextThreshold = idx !== -1 && idx < thresholdsList.length - 1 ? thresholdsList[idx + 1] : Infinity;
-      return absGap >= threshold && absGap < nextThreshold;
+      return absVal >= threshold && absVal < nextThreshold;
     }
   });
+}
+
+export function filterDataByGapMove(
+  data: NiftyDataPoint[],
+  threshold: number,
+  direction: DirectionFilter = 'all',
+  mode: FilterMode = 'min',
+  metric: FilterMetric = 'openClose'
+): NiftyDataPoint[] {
+  return filterDataByMetric(data, threshold, direction, mode, metric);
 }
 
 export interface GapMoveSummaryStats {
