@@ -1,5 +1,8 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { NiftyDataPoint, SummaryStats } from '../types';
+import { GapMoveFilter, DirectionFilter, FilterMode } from './GapMoveFilter';
+import { FilteredDaysTable } from './FilteredDaysTable';
+import { filterDataByGapMove, computeGapMoveStats } from '../data/gapUtils';
 import {
   ResponsiveContainer,
   BarChart,
@@ -16,7 +19,7 @@ import {
   ZAxis,
   ReferenceLine
 } from 'recharts';
-import { Zap, PieChart as PieIcon, ArrowUpDown, Info } from 'lucide-react';
+import { Zap, PieChart as PieIcon, ArrowUpDown, Info, Target, TrendingUp, TrendingDown, Layers } from 'lucide-react';
 
 interface GapAnalysisProps {
   data: NiftyDataPoint[];
@@ -24,26 +27,57 @@ interface GapAnalysisProps {
 }
 
 export const GapAnalysisChart: React.FC<GapAnalysisProps> = ({ data, stats }) => {
-  // Filter out days without gap data
-  const gapData = [...data]
-    .filter(d => d.gapPercent !== null && !isNaN(d.gapPercent))
-    .sort((a, b) => a.parsedDate.localeCompare(b.parsedDate));
+  const [selectedThreshold, setSelectedThreshold] = useState<number>(0);
+  const [direction, setDirection] = useState<DirectionFilter>('all');
+  const [filterMode, setFilterMode] = useState<FilterMode>('min');
 
-  const pieData = [
-    { name: 'Gap Up', value: stats.gapUpCount, color: '#10b981' },
-    { name: 'Gap Down', value: stats.gapDownCount, color: '#f43f5e' },
-    { name: 'Flat', value: stats.flatCount, color: '#94a3b8' }
-  ].filter(d => d.value > 0);
+  // Filter out days without gap data first
+  const validGapData = useMemo(() => {
+    return data
+      .filter(d => d.gapPercent !== null && !isNaN(d.gapPercent))
+      .sort((a, b) => a.parsedDate.localeCompare(b.parsedDate));
+  }, [data]);
+
+  // Apply gap move filter
+  const gapData = useMemo(() => {
+    return filterDataByGapMove(validGapData, selectedThreshold, direction, filterMode);
+  }, [validGapData, selectedThreshold, direction, filterMode]);
+
+  // Compute stats on the filtered subset
+  const filteredGapStats = useMemo(() => {
+    return computeGapMoveStats(gapData);
+  }, [gapData]);
+
+  // Pie chart counts for filtered dataset
+  const pieData = useMemo(() => {
+    let upCount = 0;
+    let downCount = 0;
+    let flatCount = 0;
+
+    gapData.forEach(d => {
+      if (d.gapType === 'GapUp') upCount++;
+      else if (d.gapType === 'GapDown') downCount++;
+      else flatCount++;
+    });
+
+    return [
+      { name: 'Gap Up', value: upCount, color: '#10b981' },
+      { name: 'Gap Down', value: downCount, color: '#f43f5e' },
+      { name: 'Flat', value: flatCount, color: '#94a3b8' }
+    ].filter(d => d.value > 0);
+  }, [gapData]);
 
   // Scatter data for correlation: Gap % (x) vs Open-Close Return % (y)
-  const scatterData = gapData.map(d => ({
-    date: d.date,
-    gapPercent: d.gapPercent || 0,
-    openCloseReturn: d.openCloseReturn,
-    dayRange: d.dayRange,
-    gapType: d.gapType,
-    isGreen: d.isGreen
-  }));
+  const scatterData = useMemo(() => {
+    return gapData.map(d => ({
+      date: d.date,
+      gapPercent: d.gapPercent || 0,
+      openCloseReturn: d.openCloseReturn,
+      dayRange: d.dayRange,
+      gapType: d.gapType,
+      isGreen: d.isGreen
+    }));
+  }, [gapData]);
 
   const CustomGapTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
@@ -97,6 +131,77 @@ export const GapAnalysisChart: React.FC<GapAnalysisProps> = ({ data, stats }) =>
 
   return (
     <div className="space-y-6 mb-6">
+      {/* Interactive Gap Move % Filter */}
+      <GapMoveFilter
+        selectedThreshold={selectedThreshold}
+        onSelectThreshold={setSelectedThreshold}
+        direction={direction}
+        onSelectDirection={setDirection}
+        filterMode={filterMode}
+        onSelectFilterMode={setFilterMode}
+        matchingCount={gapData.length}
+        totalCount={validGapData.length}
+      />
+
+      {/* Filter Performance Metrics Banner */}
+      {selectedThreshold > 0 || direction !== 'all' ? (
+        <div className="bg-white rounded-2xl p-4 border border-indigo-100 shadow-sm grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
+              Filtered Sessions
+            </span>
+            <div className="flex items-baseline gap-1.5 mt-1">
+              <span className="text-xl font-extrabold text-slate-900">{filteredGapStats.count}</span>
+              <span className="text-xs text-slate-500">Days</span>
+            </div>
+            <p className="text-[10px] text-slate-400 mt-0.5">
+              {validGapData.length > 0 ? ((filteredGapStats.count / validGapData.length) * 100).toFixed(1) : 0}% of all data
+            </p>
+          </div>
+
+          <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
+              Intraday Win Rate
+            </span>
+            <div className="flex items-baseline gap-1.5 mt-1">
+              <span className="text-xl font-extrabold text-emerald-600">{filteredGapStats.winRate}%</span>
+              <span className="text-xs text-slate-500">Bullish</span>
+            </div>
+            <p className="text-[10px] text-slate-400 mt-0.5">
+              {filteredGapStats.greenDays} Green / {filteredGapStats.redDays} Red
+            </p>
+          </div>
+
+          <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
+              Avg Intraday Return
+            </span>
+            <div className="flex items-baseline gap-1.5 mt-1">
+              <span className={`text-xl font-extrabold ${filteredGapStats.avgIntradayReturn >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                {filteredGapStats.avgIntradayReturn >= 0 ? '+' : ''}{filteredGapStats.avgIntradayReturn.toFixed(2)}%
+              </span>
+            </div>
+            <p className="text-[10px] text-slate-400 mt-0.5">
+              Open to Close %
+            </p>
+          </div>
+
+          <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
+              Average Gap Size
+            </span>
+            <div className="flex items-baseline gap-1.5 mt-1">
+              <span className={`text-xl font-extrabold ${filteredGapStats.avgGapPercent >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                {filteredGapStats.avgGapPercent >= 0 ? '+' : ''}{filteredGapStats.avgGapPercent.toFixed(2)}%
+              </span>
+            </div>
+            <p className="text-[10px] text-slate-400 mt-0.5">
+              Max Up: +{filteredGapStats.maxGapUp.toFixed(2)}%
+            </p>
+          </div>
+        </div>
+      ) : null}
+
       {/* Top Row: Gap % Bar Chart & Donut Chart */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Gap % Bar Chart */}
@@ -112,7 +217,7 @@ export const GapAnalysisChart: React.FC<GapAnalysisProps> = ({ data, stats }) =>
               </p>
             </div>
             <div className="text-xs text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg font-medium">
-              Avg Gap Up: <span className="text-emerald-600 font-bold">+{stats.avgGapUpPercent.toFixed(2)}%</span>
+              Avg Gap: <span className="text-emerald-600 font-bold">{filteredGapStats.avgGapPercent >= 0 ? '+' : ''}{filteredGapStats.avgGapPercent.toFixed(2)}%</span>
             </div>
           </div>
 
@@ -246,6 +351,14 @@ export const GapAnalysisChart: React.FC<GapAnalysisProps> = ({ data, stats }) =>
           </ResponsiveContainer>
         </div>
       </div>
+
+      {/* List of Days Having Filtered Gap % */}
+      <FilteredDaysTable
+        data={gapData}
+        threshold={selectedThreshold}
+        direction={direction}
+        filterMode={filterMode}
+      />
     </div>
   );
 };

@@ -33,6 +33,7 @@ export const DataTable: React.FC<DataTableProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [gapFilter, setGapFilter] = useState<string>('all');
+  const [gapMoveFilter, setGapMoveFilter] = useState<string>('all');
   const [candleFilter, setCandleFilter] = useState<string>('all');
 
   const [sortField, setSortField] = useState<SortField>('date');
@@ -58,8 +59,29 @@ export const DataTable: React.FC<DataTableProps> = ({
         const matchesSearch = item.date.toLowerCase().includes(searchTerm.toLowerCase()) ||
           item.indexName.toLowerCase().includes(searchTerm.toLowerCase());
 
-        // Gap filter
-        const matchesGap = gapFilter === 'all' || item.gapType === gapFilter;
+        // Gap Type filter
+        const matchesGapType = gapFilter === 'all' || item.gapType === gapFilter;
+
+        // Gap Move % filter
+        let matchesGapMove = true;
+        if (gapMoveFilter !== 'all') {
+          const absGap = item.gapPercent !== null && !isNaN(item.gapPercent) ? Math.abs(item.gapPercent) : -1;
+          if (absGap < 0) {
+            matchesGapMove = false;
+          } else if (gapMoveFilter.startsWith('min_')) {
+            const minVal = parseFloat(gapMoveFilter.replace('min_', ''));
+            matchesGapMove = absGap >= minVal;
+          } else if (gapMoveFilter.startsWith('range_')) {
+            if (gapMoveFilter === 'range_0.25_0.50') matchesGapMove = absGap >= 0.25 && absGap < 0.50;
+            else if (gapMoveFilter === 'range_0.50_0.75') matchesGapMove = absGap >= 0.50 && absGap < 0.75;
+            else if (gapMoveFilter === 'range_0.75_1.00') matchesGapMove = absGap >= 0.75 && absGap < 1.00;
+            else if (gapMoveFilter === 'range_1.00_1.25') matchesGapMove = absGap >= 1.00 && absGap < 1.25;
+            else if (gapMoveFilter === 'range_1.25_1.50') matchesGapMove = absGap >= 1.25 && absGap < 1.50;
+            else if (gapMoveFilter === 'range_1.50_1.75') matchesGapMove = absGap >= 1.50 && absGap < 1.75;
+            else if (gapMoveFilter === 'range_1.75_2.00') matchesGapMove = absGap >= 1.75 && absGap < 2.00;
+            else if (gapMoveFilter === 'range_2.00_above') matchesGapMove = absGap >= 2.00;
+          }
+        }
 
         // Candle filter
         const matchesCandle =
@@ -67,7 +89,7 @@ export const DataTable: React.FC<DataTableProps> = ({
           (candleFilter === 'green' && item.isGreen) ||
           (candleFilter === 'red' && !item.isGreen);
 
-        return matchesSearch && matchesGap && matchesCandle;
+        return matchesSearch && matchesGapType && matchesGapMove && matchesCandle;
       })
       .sort((a, b) => {
         let valA: any = a[sortField];
@@ -153,7 +175,7 @@ export const DataTable: React.FC<DataTableProps> = ({
             />
           </div>
 
-          {/* Gap Filter */}
+          {/* Gap Type Filter */}
           <select
             value={gapFilter}
             onChange={(e) => setGapFilter(e.target.value)}
@@ -163,6 +185,35 @@ export const DataTable: React.FC<DataTableProps> = ({
             <option value="GapUp">Gap Up</option>
             <option value="GapDown">Gap Down</option>
             <option value="Flat">Flat</option>
+          </select>
+
+          {/* Gap Move % Filter */}
+          <select
+            value={gapMoveFilter}
+            onChange={(e) => setGapMoveFilter(e.target.value)}
+            className="px-3 py-1.5 text-xs bg-amber-50/80 border border-amber-200 text-amber-900 font-semibold rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500"
+          >
+            <option value="all">All Gap Move %</option>
+            <optgroup label="Minimum Move (≥)">
+              <option value="min_0.25">≥ 0.25% Move</option>
+              <option value="min_0.50">≥ 0.50% Move</option>
+              <option value="min_0.75">≥ 0.75% Move</option>
+              <option value="min_1.00">≥ 1.00% Move</option>
+              <option value="min_1.25">≥ 1.25% Move</option>
+              <option value="min_1.50">≥ 1.50% Move</option>
+              <option value="min_1.75">≥ 1.75% Move</option>
+              <option value="min_2.00">≥ 2.00% Move</option>
+            </optgroup>
+            <optgroup label="Bracket Ranges">
+              <option value="range_0.25_0.50">0.25% – 0.50% Move</option>
+              <option value="range_0.50_0.75">0.50% – 0.75% Move</option>
+              <option value="range_0.75_1.00">0.75% – 1.00% Move</option>
+              <option value="range_1.00_1.25">1.00% – 1.25% Move</option>
+              <option value="range_1.25_1.50">1.25% – 1.50% Move</option>
+              <option value="range_1.50_1.75">1.50% – 1.75% Move</option>
+              <option value="range_1.75_2.00">1.75% – 2.00% Move</option>
+              <option value="range_2.00_above">&gt; 2.00% Move</option>
+            </optgroup>
           </select>
 
           {/* Candle Color Filter */}
